@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4Projects Board — sticky-note whiteboard</title>
+<style>
+  :root{
+    --bar:#161b22; --bar2:#21262d; --line:#30363d; --txt:#e6edf3; --muted:#8b949e;
+    --acc:#58a6ff; --warn:#f0b040; --danger:#f85149;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#eef1f4;color:var(--txt);overflow:hidden}
+  /* ---------- toolbar ---------- */
+  #bar{position:fixed;inset:0 0 auto 0;height:52px;background:var(--bar);display:flex;align-items:center;gap:6px;padding:0 12px;z-index:50;border-bottom:1px solid var(--line)}
+  #bar .logo{font-weight:700;font-size:15px;margin-right:6px;white-space:nowrap}
+  #bar .logo em{color:var(--acc);font-style:normal}
+  #boardName{background:var(--bar2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 9px;width:150px;font-size:13px}
+  .tbtn{background:var(--bar2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;line-height:1}
+  .tbtn:hover{border-color:var(--acc)}
+  .tbtn.on{background:#1f6feb;border-color:#1f6feb}
+  .tsep{width:1px;height:24px;background:var(--line);margin:0 4px}
+  .sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
+  select.tbtn{font-size:12px}
+  #langSel{margin-left:auto;background:var(--bar2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px 7px;font-size:12px}
+  /* ---------- board ---------- */
+  #view{position:fixed;inset:52px 0 0 0;overflow:hidden;background:#e8ebee;
+        background-image:radial-gradient(#c7ccd1 1.2px,transparent 1.2px);background-size:24px 24px;cursor:default}
+  #view.tool-note{cursor:copy} #view.tool-pen{cursor:crosshair} #view.tool-rect{cursor:crosshair}
+  #view.tool-erase{cursor:cell} #view.tool-pan{cursor:grab} #view.panning{cursor:grabbing}
+  #stage{position:absolute;left:0;top:0;transform-origin:0 0;width:1px;height:1px}
+  #svg{position:absolute;left:-50000px;top:-50000px;width:100000px;height:100000px;overflow:visible;pointer-events:none}
+  #svg .shape{pointer-events:stroke}
+  /* ---------- notes ---------- */
+  .note{position:absolute;border-radius:8px 8px 10px 10px;box-shadow:0 4px 12px rgba(0,0,0,.22);display:flex;flex-direction:column;user-select:none}
+  .note .nh{height:16px;border-radius:8px 8px 0 0;cursor:grab;flex:0 0 auto;background:rgba(0,0,0,.12);display:flex;justify-content:flex-end;align-items:center;padding-right:4px}
+  .note .nh .nx{opacity:0;font-size:11px;line-height:1;cursor:pointer;border:0;background:none;padding:2px 3px}
+  .note:hover .nx{opacity:.75}
+  .note textarea{flex:1;background:transparent;border:0;resize:none;outline:none;padding:8px 10px;font:14px/1.35 'Segoe UI',system-ui;color:#1c1c1c;overflow:auto}
+  .note .rs{position:absolute;right:2px;bottom:2px;width:12px;height:12px;cursor:nwse-resize;opacity:.35}
+  .note.sel{outline:3px solid var(--acc)}
+  /* ---------- group frame ---------- */
+  .group{position:absolute;border:2.5px dashed #6e7781;border-radius:14px;pointer-events:none}
+  .group .gt{position:absolute;top:-15px;left:14px;background:#57606a;color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:7px;cursor:grab;pointer-events:auto;white-space:nowrap;user-select:none}
+  .group .gu{margin-left:7px;background:none;border:0;color:#fff;opacity:.6;cursor:pointer;font-size:11px;padding:0}
+  .group .gu:hover{opacity:1}
+  /* ---------- marquee ---------- */
+  #mq{position:absolute;border:1.5px dashed var(--acc);background:#58a6ff22;display:none;z-index:40}
+  /* ---------- hints ---------- */
+  #hint{position:fixed;left:12px;bottom:34px;font-size:12px;color:#57606a;background:#ffffffcc;padding:4px 10px;border-radius:6px;z-index:45;pointer-events:none}
+  /* ---------- footer ---------- */
+  #foot{position:fixed;inset:auto 0 0 0;height:26px;background:var(--bar);color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;align-items:center;padding:0 12px;z-index:50}
+  #foot a{color:var(--muted)}
+  #foot a:hover{color:var(--txt)}
+  /* ---------- legal modal ---------- */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center;z-index:200}
+  .modal.open{display:grid}
+  .mbox{background:#fff;color:#1c1c1c;border-radius:12px;width:min(620px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+  .mbox .mhead{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #ddd;font-weight:700}
+  .mbox .mbody{padding:14px 16px;overflow-y:auto;white-space:pre-wrap;font-size:12.5px;line-height:1.55}
+  .mbox .mfoot{padding:10px 16px;border-top:1px solid #ddd;text-align:right}
+  .mfoot button,.mhead button{border:1px solid #ccc;background:#f3f4f6;border-radius:6px;padding:5px 14px;cursor:pointer;font-size:12px}
+  #toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:#161b22;color:#fff;padding:8px 18px;border-radius:8px;z-index:99;display:none;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <span class="logo">4Projects <em>Board</em></span>
+  <input id="boardName" placeholder="Bordnaam…">
+  <span class="tsep"></span>
+  <button class="tbtn tool on" data-tool="select" title="Select / move">⬚</button>
+  <button class="tbtn tool" data-tool="note"   title="Nieuwe notitie">🗒</button>
+  <button class="tbtn tool" data-tool="pen"    title="Teken lijn">✏</button>
+  <button class="tbtn tool" data-tool="rect"   title="Afgerond rechthoek">▢</button>
+  <button class="tbtn tool" data-tool="erase"  title="Gum">⌫</button>
+  <button class="tbtn tool" data-tool="pan"    title="Verschuif bord">✋</button>
+  <span class="tsep"></span>
+  <button class="sw" data-c="#ffe083" style="background:#ffe083"></button>
+  <button class="sw" data-c="#ffab91" style="background:#ffab91"></button>
+  <button class="sw" data-c="#f48fb1" style="background:#f48fb1"></button>
+  <button class="sw" data-c="#a5d6a7" style="background:#a5d6a7"></button>
+  <button class="sw" data-c="#90caf9" style="background:#90caf9"></button>
+  <button class="sw" data-c="#ce93d8" style="background:#ce93d8"></button>
+  <select id="sizeSel" class="tbtn" title="Notitiegrootte / lijndikte">
+    <option value="s">S</option><option value="m" selected>M</option><option value="l">L</option>
+  </select>
+  <span class="tsep"></span>
+  <button id="btnGroup"  class="tbtn" title="Groepeer selectie">👥</button>
+  <button id="btnUngrp"  class="tbtn" title="Groep opheffen">👤</button>
+  <span class="tsep"></span>
+  <button id="btnZoomOut" class="tbtn">−</button>
+  <button id="btnZoomIn"  class="tbtn">+</button>
+  <button id="btnZoomFit" class="tbtn" title="Zoom reset">1:1</button>
+  <span class="tsep"></span>
+  <button id="btnSave"  class="tbtn" title="Bord opslaan (.json)">💾</button>
+  <button id="btnLoad"  class="tbtn" title="Bord laden">📂</button>
+  <button id="btnClear" class="tbtn" title="Bord leegmaken">🗑</button>
+  <button id="btnExp4P" class="tbtn" style="background:#1f6feb;border-color:#1f6feb" title="Exporteer naar 4Projects">⬇ 4P</button>
+  <select id="langSel"><option value="nl">NL</option><option value="en">EN</option><option value="de">DE</option><option value="fr">FR</option><option value="es">ES</option></select>
+</div>
+
+<div id="view"><div id="stage"><svg id="svg"></svg><div id="notes"></div><div id="groups"></div></div></div>
+<div id="mq"></div>
+<div id="hint"></div>
+<div id="toast"></div>
+<div id="foot">
+  <span>📋 <b>4Projects Board</b> · © 2026 C.C.R Poirot / NLITS · <a href="#" onclick="legalModal(true);return false">⚖️ Legal</a></span>
+  <span><a href="https://www.4projects.pro" target="_blank" rel="noopener">www.4projects.pro</a> — <span id="latestTxt"></span></span>
+</div>
+<div id="legalModal" class="modal">
+  <div class="mbox">
+    <div class="mhead">Legal / Licence <button onclick="legalModal(false)">✕</button></div>
+    <div class="mbody">Copyright © 2026 C.C.R Poirot / NLITS, The Netherlands
+
+NLITS and 4Projects are registered names of NLITS Services, The Netherlands — legal@nlits.nl
+
+Licence: NLITS Free Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use the Software for private, personal, educational and non-profit purposes, and to view and study the source code, subject to the following conditions:
+
+1. The above copyright notice and this licence shall be included in all copies or substantial portions of the Software.
+
+2. Any commercial use — including redistribution, modification, sublicensing, resale, or offering the Software or derivative works as a product or service — requires the prior written permission of NLITS. Commercial licences are available on request via legal@nlits.nl (NLITS / NLFIN, The Netherlands).
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</div>
+    <div class="mfoot"><button onclick="legalModal(false)" id="closeBtn"></button></div>
+  </div>
+</div>
+<input type="file" id="fileIn" accept=".json" style="display:none">
+
+<script>
+'use strict';
+/* ============================================================
+   4Projects Board — sticky-note whiteboard (single file, OSS)
+   - notities: versleepbaar, schaalbaar, kleur + maat
+   - tekenen: lijn (pen) + afgeronde rechthoeken
+   - groeperen: notities horen bij elkaar → export = taak
+   - export: 4Projects-JSON (groep = taak, losse notitie = activiteit)
+   ============================================================ */
+
+// ---------- i18n ----------
+const L = {
+  nl:{board:'Bordnaam…',hint:'🗒 klik = notitie · ✏ teken · ▢ kader · sleep = selecteren · Shift+klik = meerdere · 👥 = groeperen',
+      note:'Nieuwe notitie',group:'Groep',loose:'Losse notities',wb:'Whiteboard',
+      cleared:'Bord leeggemaakt',saved:'Bord opgeslagen',loaded:'Bord geladen',badfile:'Ongeldig bordbestand',
+      exported:'4Projects-JSON geëxporteerd',nothing:'Nog geen notities om te exporteren',grpname:'Groepsnaam…',ungrouped:'Groep opgeheven',joined:'Toegevoegd aan',latest:'nieuwste versie',close:'Sluiten'},
+  en:{board:'Board name…',hint:'🗒 click = note · ✏ draw · ▢ frame · drag = select · Shift+click = multi · 👥 = group',
+      note:'New note',group:'Group',loose:'Loose notes',wb:'Whiteboard',
+      cleared:'Board cleared',saved:'Board saved',loaded:'Board loaded',badfile:'Invalid board file',
+      exported:'4Projects JSON exported',nothing:'No notes to export yet',grpname:'Group name…',ungrouped:'Group removed',joined:'Added to',latest:'latest version',close:'Close'},
+  de:{board:'Boardname…',hint:'🗒 Klick = Notiz · ✏ zeichnen · ▢ Rahmen · ziehen = auswählen · Shift+Klick = mehrere · 👥 = gruppieren',
+      note:'Neue Notiz',group:'Gruppe',loose:'Lose Notizen',wb:'Whiteboard',
+      cleared:'Board geleert',saved:'Board gespeichert',loaded:'Board geladen',badfile:'Ungültige Board-Datei',
+      exported:'4Projects-JSON exportiert',nothing:'Keine Notizen zum Exportieren',grpname:'Gruppenname…',ungrouped:'Gruppe aufgelöst',joined:'Hinzugefügt zu',latest:'neueste Version',close:'Schließen'},
+  fr:{board:'Nom du tableau…',hint:'🗒 clic = note · ✏ dessiner · ▢ cadre · glisser = sélection · Maj+clic = multi · 👥 = grouper',
+      note:'Nouvelle note',group:'Groupe',loose:'Notes libres',wb:'Tableau',
+      cleared:'Tableau effacé',saved:'Tableau enregistré',loaded:'Tableau chargé',badfile:'Fichier tableau invalide',
+      exported:'JSON 4Projects exporté',nothing:'Aucune note à exporter',grpname:'Nom du groupe…',ungrouped:'Groupe dissous',joined:'Ajouté à',latest:'dernière version',close:'Fermer'},
+  es:{board:'Nombre del tablero…',hint:'🗒 clic = nota · ✏ dibujar · ▢ marco · arrastrar = seleccionar · Mayús+clic = multi · 👥 = agrupar',
+      note:'Nueva nota',group:'Grupo',loose:'Notas sueltas',wb:'Pizarra',
+      cleared:'Tablero vaciado',saved:'Tablero guardado',loaded:'Tablero cargado',badfile:'Archivo de tablero inválido',
+      exported:'JSON de 4Projects exportado',nothing:'No hay notas para exportar',grpname:'Nombre del grupo…',ungrouped:'Grupo disuelto',joined:'Añadido a',latest:'última versión',close:'Cerrar'}
+};
+let lang = 'nl';
+const T = k => (L[lang] && L[lang][k]) || L.en[k] || k;
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){ const t = $('#toast'); t.textContent = m; t.style.display='block'; clearTimeout(t._h); t._h = setTimeout(()=>t.style.display='none', 2400); }
+function dl(name, obj){ const b = new Blob([JSON.stringify(obj,null,1)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+
+// ---------- state ----------
+const NOTE_SIZES = { s:[150,140], m:[190,170], l:[250,200] };
+const PEN_W      = { s:2, m:3.5, l:6 };
+let board = { name:'', notes:[], shapes:[], groups:[] };   // het hele bord
+let tool = 'select', curColor = '#ffe083', curSize = 'm';
+let view = { x:0, y:0, z:1 };
+let sel = new Set();                                        // geselecteerde note-ids
+let drawing = null, drag = null, pan = null, mq = null;
+
+// ---------- persistence ----------
+function save(){ board.name = $('#boardName').value; localStorage.setItem('4pb-board', JSON.stringify(board)); }
+function load(){ try{ const b = JSON.parse(localStorage.getItem('4pb-board'));
+  if (b && Array.isArray(b.notes)) board = b; }catch(e){} }
+
+// ---------- rendering ----------
+const stage = $('#stage'), notesEl = $('#notes'), groupsEl = $('#groups'), svg = $('#svg');
+const svgNS = 'http://www.w3.org/2000/svg';
+function applyView(){ stage.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.z})`; }
+
+function render(){
+  // notities
+  notesEl.innerHTML = '';
+  board.notes.forEach(n => {
+    const d = document.createElement('div');
+    d.className = 'note' + (sel.has(n.id) ? ' sel' : '');
+    d.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;background:${n.color}`;
+    d.dataset.id = n.id;
+    d.innerHTML = `<div class="nh"><button class="nx" title="×">✕</button></div>
+      <textarea spellcheck="false">${esc(n.text)}</textarea><div class="rs">◢</div>`;
+    notesEl.appendChild(d);
+  });
+  // groep-kaders
+  groupsEl.innerHTML = '';
+  board.groups.forEach(g => {
+    const ms = board.notes.filter(n => n.group === g.id);
+    if (!ms.length) return;
+    const pad = 14;
+    const x1 = Math.min(...ms.map(n=>n.x))-pad, y1 = Math.min(...ms.map(n=>n.y))-pad-20,
+          x2 = Math.max(...ms.map(n=>n.x+n.w))+pad, y2 = Math.max(...ms.map(n=>n.y+n.h))+pad;
+    const f = document.createElement('div');
+    f.className = 'group'; f.dataset.id = g.id;
+    f.style.cssText = `left:${x1}px;top:${y1}px;width:${x2-x1}px;height:${y2-y1}px`;
+    f.innerHTML = `<div class="gt" data-g="${g.id}">${esc(g.title || T('group'))}<button class="gu" data-g="${g.id}" title="⛓">⛓✕</button></div>`;
+    groupsEl.appendChild(f);
+  });
+  // tekeningen
+  svg.innerHTML = '';
+  board.shapes.forEach(s => {
+    let el;
+    if (s.type === 'pen') {
+      el = document.createElementNS(svgNS, 'polyline');
+      el.setAttribute('points', s.points.map(p => p.join(',')).join(' '));
+      el.setAttribute('fill', 'none'); el.setAttribute('stroke-linecap','round'); el.setAttribute('stroke-linejoin','round');
+    } else {
+      el = document.createElementNS(svgNS, 'rect');
+      el.setAttribute('x', s.x); el.setAttribute('y', s.y);
+      el.setAttribute('width', s.w); el.setAttribute('height', s.h);
+      el.setAttribute('rx', 16); el.setAttribute('fill', 'none');
+    }
+    el.setAttribute('stroke', s.color); el.setAttribute('stroke-width', s.lw);
+    el.classList.add('shape'); el.dataset.id = s.id;
+    svg.appendChild(el);
+  });
+  save();
+}
+
+// ---------- bord-coördinaten ----------
+const vpos = e => ({ x:(e.clientX - view.x)/view.z, y:(e.clientY - view.y - 52)/view.z });
+
+// ---------- tools ----------
+document.querySelectorAll('.tbtn.tool').forEach(b => b.onclick = () => {
+  tool = b.dataset.tool;
+  document.querySelectorAll('.tbtn.tool').forEach(x => x.classList.toggle('on', x === b));
+  $('#view').className = 'tool-' + tool;
+  $('#hint').textContent = T('hint');
+});
+document.querySelectorAll('.sw').forEach(b => b.onclick = () => {
+  curColor = b.dataset.c;
+  document.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === b));
+  sel.forEach(id => { const n = board.notes.find(n=>n.id===id); if (n) n.color = curColor; });
+  render();
+});
+$('#sizeSel').onchange = e => curSize = e.target.value;
+
+// ---------- notitie interactie ----------
+function noteAt(e){ const el = e.target.closest('.note'); return el ? board.notes.find(n=>n.id===el.dataset.id) : null; }
+
+$('#view').addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const p = vpos(e);
+
+  if (tool === 'pan') { pan = { sx:e.clientX, sy:e.clientY, vx:view.x, vy:view.y }; $('#view').classList.add('panning'); return; }
+  if (tool === 'note') { addNote(p.x, p.y); return; }
+  if (tool === 'pen')  { drawing = { id:uid(), type:'pen', color:curColor, lw:PEN_W[curSize], points:[[p.x,p.y]] }; board.shapes.push(drawing); render(); return; }
+  if (tool === 'rect') { drawing = { id:uid(), type:'rrect', color:curColor, lw:PEN_W[curSize], x:p.x, y:p.y, w:0, h:0 }; board.shapes.push(drawing); render(); return; }
+  if (tool === 'erase'){ eraseAt(p); return; }
+
+  // select tool
+  const gu = e.target.closest('.gu');
+  if (gu) { // groep ontkoppelen via ⛓✕ op de titelbalk
+    const gid = gu.dataset.g;
+    board.notes.forEach(n => { if (n.group === gid) n.group = null; });
+    board.groups = board.groups.filter(g => g.id !== gid);
+    toast(T('ungrouped')); render(); return;
+  }
+  const gt = e.target.closest('.gt');
+  if (gt) { // groep verslepen
+    const g = board.groups.find(x=>x.id===gt.dataset.g);
+    const ms = board.notes.filter(n=>n.group===g.id);
+    drag = { type:'group', notes:ms, sx:p.x, sy:p.y };
+    return;
+  }
+  const n = noteAt(e);
+  if (n) {
+    const el = e.target.closest('.note');
+    if (e.target.classList.contains('nx')) { board.notes = board.notes.filter(x=>x.id!==n.id); sel.delete(n.id); render(); return; }
+    if (e.target.classList.contains('rs')) { drag = { type:'resize', n, sx:p.x, sy:p.y, w:n.w, h:n.h }; return; }
+    if (e.target.closest('.nh')) {
+      if (!sel.has(n.id)) { if (!e.shiftKey) sel.clear(); sel.add(n.id); }
+      drag = { type:'notes', sx:p.x, sy:p.y, orig:[...sel].map(id=>{const m=board.notes.find(x=>x.id===id);return{id,x:m.x,y:m.y};}) };
+      render();
+      return;
+    }
+    return; // textarea: gewoon typen
+  }
+  // leeg canvas → marquee-selectie
+  if (!e.shiftKey) { sel.clear(); }
+  mq = { x0:e.clientX, y0:e.clientY, x1:e.clientX, y1:e.clientY, add:e.shiftKey };
+  render();
+});
+
+addEventListener('mousemove', e => {
+  const p = vpos(e);
+  if (pan) { view.x = pan.vx + (e.clientX-pan.sx); view.y = pan.vy + (e.clientY-pan.sy); applyView(); return; }
+  if (drawing && drawing.type==='pen') { const l = drawing.points[drawing.points.length-1];
+    if (Math.hypot(p.x-l[0],p.y-l[1]) > 2/view.z) { drawing.points.push([p.x,p.y]); render(); } return; }
+  if (drawing && drawing.type==='rrect') { drawing.w = p.x-drawing.x; drawing.h = p.y-drawing.y; render(); return; }
+  if (tool==='erase' && e.buttons===1) eraseAt(p);
+  if (drag && drag.type==='resize') { drag.n.w = Math.max(90, drag.w + (p.x-drag.sx)); drag.n.h = Math.max(70, drag.h + (p.y-drag.sy)); render(); return; }
+  if (drag && (drag.type==='notes'||drag.type==='group')) {
+    const dx = p.x-drag.sx, dy = p.y-drag.sy;
+    (drag.type==='group' ? drag.notes : drag.orig.map(o=>board.notes.find(n=>n.id===o.id)))
+      .forEach(n => { const o = drag.type==='group' ? n : drag.orig.find(o=>o.id===n.id);
+        if (drag.type==='group'){ n.x += dx; n.y += dy; } else { n.x = o.x+dx; n.y = o.y+dy; } });
+    if (drag.type==='group') drag.sx = p.x, drag.sy = p.y;
+    render(); return;
+  }
+  if (mq) { mq.x1 = e.clientX; mq.y1 = e.clientY; drawMq(); }
+});
+function frameOf(g){
+  const ms = board.notes.filter(n => n.group === g.id);
+  if (!ms.length) return null;
+  const pad = 14;
+  return { x1:Math.min(...ms.map(n=>n.x))-pad, y1:Math.min(...ms.map(n=>n.y))-pad-20,
+           x2:Math.max(...ms.map(n=>n.x+n.w))+pad, y2:Math.max(...ms.map(n=>n.y+n.h))+pad };
+}
+
+addEventListener('mouseup', e => {
+  pan = null; $('#view').classList.remove('panning');
+  if (drag && drag.type === 'notes') {
+    // losse notitie in een groepskader gedropt → lid worden (of van groep wisselen)
+    const frames = board.groups.map(g => ({ g, f: frameOf(g) })).filter(x => x.f);
+    drag.orig.forEach(o => {
+      const n = board.notes.find(x => x.id === o.id); if (!n) return;
+      const cx = n.x + n.w/2, cy = n.y + n.h/2;
+      const hit = frames.find(x => x.g.id !== n.group && cx > x.f.x1 && cx < x.f.x2 && cy > x.f.y1 && cy < x.f.y2);
+      if (hit) { n.group = hit.g.id; toast(T('joined') + ' ' + (hit.g.title || T('group'))); }
+    });
+    board.groups = board.groups.filter(g => board.notes.some(x => x.group === g.id)); // lege groepen weg
+    render();
+  }
+  if (drawing) { // te klein = weg
+    if (drawing.type==='rrect' && Math.abs(drawing.w)<4 && Math.abs(drawing.h)<4) board.shapes.pop();
+    if (drawing.type==='pen' && drawing.points.length<2) board.shapes.pop();
+    if (drawing && drawing.w<0){drawing.x+=drawing.w;drawing.w=-drawing.w}
+    if (drawing && drawing.h<0){drawing.y+=drawing.h;drawing.h=-drawing.h}
+    drawing = null; render();
+  }
+  if (mq) { finishMq(e); mq = null; drawMq(); }
+  drag = null;
+});
+
+// ---------- marquee ----------
+function drawMq(){
+  const m = $('#mq');
+  if (!mq){ m.style.display='none'; return; }
+  m.style.display='block';
+  m.style.left = Math.min(mq.x0,mq.x1)+'px'; m.style.top = Math.min(mq.y0,mq.y1)+'px';
+  m.style.width = Math.abs(mq.x1-mq.x0)+'px'; m.style.height = Math.abs(mq.y1-mq.y0)+'px';
+}
+function finishMq(e){
+  if (!mq.add) sel.clear();
+  const x1=(Math.min(mq.x0,mq.x1)-view.x)/view.z, y1=(Math.min(mq.y0,mq.y1)-view.y-52)/view.z,
+        x2=(Math.max(mq.x0,mq.x1)-view.x)/view.z, y2=(Math.max(mq.y0,mq.y1)-view.y-52)/view.z;
+  board.notes.forEach(n => { if (n.x<x2 && n.x+n.w>x1 && n.y<y2 && n.y+n.h>y1) sel.add(n.id); });
+  render();
+  // rubberband over >=2 notities → meteen groepsnaam vragen
+  if (sel.size >= 2) {
+    const gs = new Set([...sel].map(id => (board.notes.find(n=>n.id===id)||{}).group));
+    if (!(gs.size === 1 && [...gs][0])) makeGroup();   // overslaan als alles al in dezelfde groep zit
+  }
+}
+addEventListener('click', e => { // shift+klik op notitie → multi-select
+  if (tool!=='select' || !e.shiftKey) return;
+  const n = noteAt(e); if (!n) return;
+  sel.has(n.id) ? sel.delete(n.id) : sel.add(n.id); render();
+});
+
+// tekst in notitie → board (delegated: render() maakt textarea telkens opnieuw)
+notesEl.addEventListener('input', e => {
+  const d = e.target.closest('.note'); if (!d) return;
+  const n = board.notes.find(n => n.id === d.dataset.id);
+  if (n) { n.text = e.target.value; save(); }
+});
+
+// ---------- acties ----------
+function addNote(x, y){
+  const [w,h] = NOTE_SIZES[curSize];
+  board.notes.push({ id:uid(), x:x-w/2, y:y-h/2, w, h, text:'', color:curColor, group:null });
+  render();
+}
+function eraseAt(p){
+  const hit = board.shapes.find(s =>
+    s.type==='rrect'
+      ? p.x>s.x-6 && p.x<s.x+s.w+6 && p.y>s.y-6 && p.y<s.y+s.h+6
+      : s.points.some(pt => Math.hypot(pt[0]-p.x, pt[1]-p.y) < 8/view.z));
+  if (hit){ board.shapes = board.shapes.filter(s=>s!==hit); render(); }
+}
+function makeGroup(){
+  if (sel.size < 1) return;
+  const title = prompt(T('grpname'), '');
+  if (title === null) return;                        // Esc/leeg = alleen selectie
+  const g = { id:uid(), title: title.trim() };
+  board.groups.push(g);
+  sel.forEach(id => { const n = board.notes.find(n=>n.id===id); if (n) n.group = g.id; });
+  sel.clear(); render();
+}
+$('#btnGroup').onclick = makeGroup;
+$('#btnUngrp').onclick = () => {
+  let n = 0;
+  sel.forEach(id => { const m = board.notes.find(x=>x.id===id); if (m && m.group) { m.group = null; n++; } });
+  board.groups = board.groups.filter(g => board.notes.some(x => x.group === g.id)); // lege groepen weg
+  if (n) toast(T('ungrouped'));
+  render();
+};
+$('#btnZoomIn').onclick  = () => { view.z = Math.min(3, view.z*1.2); applyView(); };
+$('#btnZoomOut').onclick = () => { view.z = Math.max(.25, view.z/1.2); applyView(); };
+$('#btnZoomFit').onclick = () => { view = {x:0,y:0,z:1}; applyView(); };
+$('#btnClear').onclick   = () => { if (confirm('?')) { board = {name:$('#boardName').value,notes:[],shapes:[],groups:[]}; sel.clear(); render(); toast(T('cleared')); } };
+$('#boardName').oninput  = save;
+
+// ---------- opslaan / laden ----------
+$('#btnSave').onclick = () => dl(($('#boardName').value||'board') + '.4pboard.json', { kind:'4projects-board', board });
+$('#btnLoad').onclick = () => $('#fileIn').click();
+$('#fileIn').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try {
+    const o = JSON.parse(r.result);
+    const b = o.kind==='4projects-board' ? o.board : o;
+    if (!b || !Array.isArray(b.notes)) { toast(T('badfile')); return; }
+    board = { name:b.name||'', notes:b.notes||[], shapes:b.shapes||[], groups:b.groups||[] };
+    $('#boardName').value = board.name; sel.clear(); render(); toast(T('loaded'));
+  } catch(err){ toast(T('badfile')); } };
+  r.readAsText(f); e.target.value = '';
+};
+
+// ---------- 4Projects export ----------
+const actOf = n => ({
+  id: uid(),
+  title: (n.text.split('\n')[0] || T('note')).slice(0, 120),
+  assignee: '', startDate: '', deadline: '',
+  status: 'Nieuw', priority: 'Normaal',
+  notes: n.text
+});
+$('#btnExp4P').onclick = () => {
+  if (!board.notes.length) { toast(T('nothing')); return; }
+  const name = $('#boardName').value.trim() || T('wb');
+  const tasks = board.groups.map(g => ({
+    id: uid(), title: g.title || T('group'), collapsed: false,
+    activities: board.notes.filter(n => n.group===g.id).map(actOf)
+  })).filter(tk => tk.activities.length);
+  const proj = {
+    id: uid(), name, collapsed: false,
+    containers: [{
+      id: uid(), type: 'fase', title: name, collapsed: false,
+      tasks,
+      activities: board.notes.filter(n => !n.group).map(actOf)   // losse notities = activiteiten
+    }]
+  };
+  dl(name + ' — 4projects.json', proj);
+  toast(T('exported'));
+};
+
+// ---------- legal ----------
+function legalModal(open){ $('#legalModal').classList.toggle('open', open); }
+
+// ---------- taal ----------
+function applyLang(){ $('#boardName').placeholder = T('board'); $('#hint').textContent = T('hint');
+  $('#latestTxt').textContent = T('latest'); $('#closeBtn').textContent = T('close'); render(); }
+$('#langSel').onchange = e => { lang = e.target.value; applyLang(); };
+
+// ---------- init ----------
+load();
+$('#boardName').value = board.name || '';
+applyLang();
+document.querySelector('.sw[data-c="'+curColor+'"]').classList.add('on');
+</script>
+</body>
+</html>

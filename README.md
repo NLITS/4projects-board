@@ -1,6 +1,3 @@
-# 4projects-board
-A stickynotes white board with all features that can export is a file that can be imported by 4 projects free as tasks and activities. So ideal to use in a kickoff gather al the input. load it in to 4projects en drag it to where you want it in the project or just delete it.
-
 # 4Projects Board
 
 A free, open-source sticky-note whiteboard in a **single HTML5 file** — no install, no account, no server. Perfect for project kickoff sessions: capture what needs to be done as sticky notes, group them, and export straight into [4Projects](https://www.4projects.pro) as tasks & activities.
@@ -37,4 +34,3 @@ Open `4projects-board.html` in any modern browser — that's it. Works offline.
 ## License
 
 Open source — free to use, modify and share.
-
